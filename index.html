@@ -42,6 +42,45 @@
 
         const ACTORES = window.GUION_DATA || [];
 
+        // --- SISTEMA DE SONIDO (Sintetizador Web Audio API) ---
+        const playSound = (type) => {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                const now = ctx.currentTime;
+
+                if (type === 'correct') {
+                    // Sonido agudo y alegre (Seno)
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'wrong') {
+                    // Sonido grave y seco (Diente de sierra)
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                }
+            } catch (e) {
+                console.error("Audio error", e);
+            }
+        };
+
         // --- ICONOS ---
         const Icon = ({ d, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
@@ -59,7 +98,11 @@
             ArrowLeft: (props) => <Icon {...props} d={<path d="m15 18-6-6 6-6"/>} />,
             Clapperboard: (props) => <Icon {...props} d={<><path d="M20.2 6 3 11l-.9-2.4c-.5-1.1.2-2.4 1.3-2.9l13.2-4.8c1.1-.5 2.4.2 2.9 1.3l.9 2.4"/><path d="m3 11 1.6 4.3c.5 1.1 1.7 1.7 2.9 1.3l13.2-4.8c1.1-.5 1.7-1.7 1.3-2.9l-1.6-4.3"/><path d="m5 13 14-5"/></>} />,
             Search: (props) => <Icon {...props} d={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>} />,
-            Refresh: (props) => <Icon {...props} d={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} />
+            Refresh: (props) => <Icon {...props} d={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} />,
+            SortDesc: (props) => <Icon {...props} d={<><path d="M11 5h10"/><path d="M11 9h7"/><path d="M11 13h4"/><path d="M3 17l3 3 3-3"/><path d="M6 18V4"/></>} />,
+            SortAsc: (props) => <Icon {...props} d={<><path d="M11 5h10"/><path d="M11 9h7"/><path d="M11 13h4"/><path d="M3 11V4"/><path d="M3 4l3-3 3 3"/></>} />,
+            Play: (props) => <Icon {...props} d={<polygon points="5 3 19 12 5 21 5 3" />} />,
+            ArrowRight: (props) => <Icon {...props} d={<path d="M5 12h14M12 5l7 7-7 7"/>} />
         };
 
         // --- UI HELPERS ---
@@ -104,6 +147,7 @@
             const [selectedScene, setSelectedScene] = useState(null);
             const [selectedCharacterData, setSelectedCharacterData] = useState(null);
             const [searchQuery, setSearchQuery] = useState("");
+            const [sortMethod, setSortMethod] = useState('lines'); // 'alpha', 'lines'
             
             // Test States
             const [testMode, setTestMode] = useState(null); 
@@ -113,12 +157,14 @@
             const [lastAnswerCorrect, setLastAnswerCorrect] = useState(null);
             const [currentOptions, setCurrentOptions] = useState([]);
             const [selectedOption, setSelectedOption] = useState(null);
-            const [failedQuestions, setFailedQuestions] = useState([]); // Array para guardar fallos
+            const [failedQuestions, setFailedQuestions] = useState([]); 
 
-            // Study States
+            // Study & Rehearsal States
             const [hiddenLines, setHiddenLines] = useState({});
             const [showAllLines, setShowAllLines] = useState(true);
-            const [onlyCuesMode, setOnlyCuesMode] = useState(false); // Nuevo modo "Solo Pies"
+            const [onlyCuesMode, setOnlyCuesMode] = useState(false);
+            const [rehearsalIndex, setRehearsalIndex] = useState(0); // Para el modo "Paso a paso"
+            const [rehearsalRevealed, setRehearsalRevealed] = useState(false);
 
             // --- PROCESAMIENTO DE DATOS ---
             const SCENES_LIST = useMemo(() => {
@@ -168,6 +214,24 @@
                 setOnlyCuesMode(false);
             };
 
+            // --- LÓGICA DE ENSAYO PASO A PASO ---
+            const startRehearsal = () => {
+                setRehearsalIndex(0);
+                setRehearsalRevealed(false);
+                setGameState('REHEARSAL');
+            };
+
+            const nextRehearsalLine = () => {
+                const next = rehearsalIndex + 1;
+                if (next < selectedCharacterData.lines.length) {
+                    setRehearsalIndex(next);
+                    setRehearsalRevealed(false);
+                } else {
+                    // Fin del ensayo
+                    setGameState('DASHBOARD');
+                }
+            };
+
             // --- LÓGICA DE TEST MEJORADA ---
             const startTest = (mode, questionsToUse = null) => {
                 setTestMode(mode);
@@ -180,18 +244,14 @@
                 let questions = [];
                 
                 if (questionsToUse) {
-                    // Modo "Reintentar fallos": Usamos las preguntas pasadas
                     questions = questionsToUse;
                 } else {
-                    // Modo normal: Generamos preguntas
                     const allLines = selectedCharacterData.lines;
                     const indices = Array.from({ length: allLines.length }, (_, i) => i);
                     
                     if (mode === 'easy') {
-                        // Secuencial
                         questions = indices.map(i => allLines[i]);
                     } else {
-                        // Aleatorio
                         const shuffledIndices = indices.sort(() => Math.random() - 0.5);
                         questions = shuffledIndices.map(i => allLines[i]);
                     }
@@ -204,17 +264,15 @@
 
             const generateOptions = (currentLine, mode) => {
                 let distractors = [];
-                const allCharacterLines = selectedCharacterData.lines; // Siempre usamos todas las líneas para generar distractores
+                const allCharacterLines = selectedCharacterData.lines;
                 
                 if (mode === 'easy') {
-                    // Distractores de OTROS actores (fáciles)
                     const otherActorsLines = ACTORES
                         .filter(a => a.id !== selectedCharacterData.actorId)
                         .flatMap(a => a.lineas)
                         .map(l => l.t);
                     distractors = otherActorsLines.sort(() => 0.5 - Math.random()).slice(0, 3);
                 } else {
-                    // Distractores del MISMO personaje (difíciles)
                     const sameSceneLines = allCharacterLines.filter(l => l.t !== currentLine.t);
                     if (sameSceneLines.length >= 3) {
                          distractors = sameSceneLines.sort(() => 0.5 - Math.random()).slice(0, 3).map(l => l.t);
@@ -241,6 +299,9 @@
 
                 setLastAnswerCorrect(isCorrect);
                 
+                // EFECTO DE SONIDO
+                playSound(isCorrect ? 'correct' : 'wrong');
+
                 if (isCorrect) {
                     setScore(s => s + 1);
                 } else {
@@ -287,10 +348,19 @@
 
             const renderCharacters = () => {
                 const characters = getCharactersInScene(selectedScene);
-                const filteredChars = characters.filter(c => 
+                let filteredChars = characters.filter(c => 
                     c.characterName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                     c.actorName.toLowerCase().includes(searchQuery.toLowerCase())
                 );
+
+                // LÓGICA DE ORDENACIÓN (SWITCH)
+                filteredChars.sort((a, b) => {
+                    if (sortMethod === 'alpha') {
+                        return a.characterName.localeCompare(b.characterName);
+                    } else {
+                        return b.lines.length - a.lines.length;
+                    }
+                });
 
                 return (
                     <div className="max-w-4xl mx-auto w-full animate-fade-in px-4 py-8">
@@ -300,16 +370,34 @@
                         
                         <h2 className="text-2xl md:text-4xl font-bold text-center text-white mb-2">{selectedScene}</h2>
                         
-                        {/* Buscador */}
-                        <div className="max-w-md mx-auto mb-8 relative">
-                            <input 
-                                type="text" 
-                                placeholder="Buscar personaje..." 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-slate-800 border border-slate-700 rounded-full py-3 px-10 text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                            />
-                            <div className="absolute left-3 top-3.5 text-slate-500"><Icons.Search size={18} /></div>
+                        <div className="flex flex-col md:flex-row gap-4 mb-8 items-center max-w-2xl mx-auto">
+                            {/* Buscador */}
+                            <div className="relative w-full">
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar personaje..." 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-full py-3 px-10 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                />
+                                <div className="absolute left-3 top-3.5 text-slate-500"><Icons.Search size={18} /></div>
+                            </div>
+                            
+                            {/* Switch de Ordenación */}
+                            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700 shrink-0">
+                                <button 
+                                    onClick={() => setSortMethod('lines')}
+                                    className={`px-3 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${sortMethod === 'lines' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    <Icons.SortDesc size={16} /> Intervenciones
+                                </button>
+                                <button 
+                                    onClick={() => setSortMethod('alpha')}
+                                    className={`px-3 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${sortMethod === 'alpha' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    <Icons.SortAsc size={16} /> A-Z
+                                </button>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -338,13 +426,22 @@
                             <h2 className="text-3xl md:text-4xl font-bold text-white">{selectedCharacterData.characterName}</h2>
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Nuevo Modo: Ensayo Guiado */}
+                        <Card onClick={startRehearsal} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-amber-500 group transform transition hover:scale-[1.02]">
+                            <div className="mb-4 bg-amber-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform"><Icons.Play /></div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Ensayo Guiado</h3>
+                            <p className="text-slate-400 mb-6">Paso a paso. Ve el pie, recita tu frase y comprueba. Ideal para memorizar el flujo.</p>
+                            <Button variant="secondary" className="w-full">Comenzar</Button>
+                        </Card>
+
                         <Card onClick={() => setGameState('STUDY')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-emerald-500 group transform transition hover:scale-[1.02]">
                             <div className="mb-4 bg-emerald-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform"><Icons.Book /></div>
-                            <h3 className="text-2xl font-bold text-white mb-2">Estudiar Guion</h3>
-                            <p className="text-slate-400 mb-6">Lee tus frases en orden. Oculta el texto o deja solo los pies para memorizar.</p>
-                            <Button variant="success" className="w-full">Entrar</Button>
+                            <h3 className="text-2xl font-bold text-white mb-2">Leer Guion</h3>
+                            <p className="text-slate-400 mb-6">Lee todas tus frases en lista. Oculta el texto o deja solo los pies.</p>
+                            <Button variant="success" className="w-full">Leer</Button>
                         </Card>
+
                         <Card onClick={() => setGameState('CONFIG_TEST')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-indigo-500 group transform transition hover:scale-[1.02]">
                             <div className="mb-4 bg-indigo-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform"><Icons.Brain /></div>
                             <h3 className="text-2xl font-bold text-white mb-2">Modo Test</h3>
@@ -354,6 +451,61 @@
                     </div>
                 </div>
             );
+
+            // --- NUEVO MODO: ENSAYO GUIADO (Rehearsal) ---
+            const renderRehearsal = () => {
+                const currentLine = selectedCharacterData.lines[rehearsalIndex];
+                const total = selectedCharacterData.lines.length;
+
+                return (
+                    <div className="max-w-2xl mx-auto w-full px-4 py-8 animate-fade-in flex flex-col min-h-screen md:min-h-0 md:h-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <Button size="small" variant="ghost" onClick={() => setGameState('DASHBOARD')}><Icons.X size={18} /> Salir</Button>
+                            <span className="text-slate-400 font-mono text-sm">Línea {rehearsalIndex + 1} de {total}</span>
+                        </div>
+
+                        <div className="flex-1 flex flex-col gap-6">
+                            {/* Tarjeta del PIE */}
+                            <div className="bg-slate-800 p-8 rounded-2xl border-t-4 border-indigo-500 shadow-xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.User size={64}/></div>
+                                <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-4">PIE (Lo que dicen antes)</p>
+                                <p className="text-2xl md:text-3xl text-white font-serif italic leading-relaxed">
+                                    "{currentLine.cue}"
+                                </p>
+                            </div>
+
+                            {/* Tarjeta de la RESPUESTA */}
+                            <div className={`transition-all duration-500 ${rehearsalRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                                <div className="bg-emerald-900/20 p-8 rounded-2xl border border-emerald-900/50 shadow-xl relative">
+                                    <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">TU FRASE ({currentLine.p})</p>
+                                    <p className="text-xl md:text-2xl text-emerald-100 font-medium leading-relaxed">
+                                        {currentLine.t}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Botonera Fija Abajo */}
+                        <div className="mt-8 pt-4 border-t border-slate-800">
+                            {!rehearsalRevealed ? (
+                                <button 
+                                    onClick={() => setRehearsalRevealed(true)}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-6 rounded-xl text-xl shadow-lg shadow-indigo-900/50 transition-all active:scale-95 flex items-center justify-center gap-3"
+                                >
+                                    <Icons.Eye size={24} /> Revelar mi frase
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={nextRehearsalLine}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-6 rounded-xl text-xl shadow-lg shadow-emerald-900/50 transition-all active:scale-95 flex items-center justify-center gap-3"
+                                >
+                                    Siguiente Línea <Icons.ArrowRight size={24} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
 
             const renderStudy = () => (
                 <div className="max-w-3xl mx-auto w-full px-4 pb-20 animate-fade-in pt-4">
@@ -368,7 +520,6 @@
                             </div>
                         </div>
                         
-                        {/* Botonera de herramientas de estudio */}
                         <div className="flex gap-2 overflow-x-auto pb-2 w-full no-scrollbar">
                             <Button size="small" variant="secondary" onClick={() => {
                                 const newState = !showAllLines;
@@ -384,9 +535,9 @@
                             <Button size="small" variant={onlyCuesMode ? "primary" : "outline"} onClick={() => {
                                 const newMode = !onlyCuesMode;
                                 setOnlyCuesMode(newMode);
-                                setShowAllLines(!newMode); // Si activamos cues, ocultamos lineas
+                                setShowAllLines(!newMode); 
                                 const newHidden = {};
-                                selectedCharacterData.lines.forEach((l, i) => newHidden[i] = newMode); // Si activamos cues, ocultamos todo
+                                selectedCharacterData.lines.forEach((l, i) => newHidden[i] = newMode); 
                                 setHiddenLines(newHidden);
                             }}>
                                 <span className="whitespace-nowrap">🎭 Solo Pies (Ensayo)</span>
@@ -465,7 +616,6 @@
                             </span>
                         </div>
 
-                        {/* Barra de progreso */}
                         <div className="mb-6">
                             <ProgressBar 
                                 current={currentQuestionIndex + 1} 
@@ -565,6 +715,7 @@
                     {gameState === 'CHARACTERS' && renderCharacters()}
                     {gameState === 'DASHBOARD' && renderDashboard()}
                     {gameState === 'STUDY' && renderStudy()}
+                    {gameState === 'REHEARSAL' && renderRehearsal()}
                     {gameState === 'CONFIG_TEST' && renderTestConfig()}
                     {gameState === 'PLAYING' && renderPlaying()}
                     {gameState === 'RESULT' && renderResult()}
