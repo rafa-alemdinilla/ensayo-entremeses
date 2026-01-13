@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entremeses - Ensayo Teatral</title>
+    <!-- Carga de Librerías -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #020617; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+    </style>
+</head>
+<body class="text-slate-200 selection:bg-indigo-500/30">
+    <div id="root"></div>
+
+    <!-- 1. CARGAMOS TUS DATOS (Asegúrate de que datos.js está en la misma carpeta) -->
+    <script src="datos.js"></script>
+
+    <!-- 2. LÓGICA DE LA APLICACIÓN -->
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        // Verificación de seguridad
+        if (!window.GUION_DATA) {
+            alert("Error: No se encuentra el archivo datos.js o tiene errores. Asegúrate de que ambos archivos estén en la misma carpeta.");
+        }
+
+        const ACTORES = window.GUION_DATA || [];
+
+        // --- ICONOS ---
+        const Icon = ({ d, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
+        );
+        
+        const Icons = {
+            User: (props) => <Icon {...props} d={<><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>} />,
+            Book: (props) => <Icon {...props} d={<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>} />,
+            Brain: (props) => <Icon {...props} d={<path d="M9.5 2A2.5 12.36 0 0 0 7 4.36V20a2 12.36 0 0 0 2.5 2.36 2 12.36 0 0 0 2.5-2.36V4.36A2.5 12.36 0 0 0 9.5 2z"/>} />, 
+            Check: (props) => <Icon {...props} d={<polyline points="20 6 9 17 4 12"/>} />,
+            X: (props) => <Icon {...props} d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />,
+            Home: (props) => <Icon {...props} d={<><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>} />,
+            Eye: (props) => <Icon {...props} d={<><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></>} />,
+            EyeOff: (props) => <Icon {...props} d={<><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7c.44 0 .87-.03 1.28-.09"/><line x1="2" y1="2" x2="22" y2="22"/></>} />,
+            ArrowLeft: (props) => <Icon {...props} d={<path d="m15 18-6-6 6-6"/>} />,
+            Clapperboard: (props) => <Icon {...props} d={<><path d="M20.2 6 3 11l-.9-2.4c-.5-1.1.2-2.4 1.3-2.9l13.2-4.8c1.1-.5 2.4.2 2.9 1.3l.9 2.4"/><path d="m3 11 1.6 4.3c.5 1.1 1.7 1.7 2.9 1.3l13.2-4.8c1.1-.5 1.7-1.7 1.3-2.9l-1.6-4.3"/><path d="m5 13 14-5"/></>} />
+        };
+
+        // --- UI HELPERS ---
+        const Card = ({ children, className = "", onClick }) => (
+            <div onClick={onClick} className={`bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden ${className}`}>
+                {children}
+            </div>
+        );
+
+        const Button = ({ onClick, children, variant = 'primary', className = "", disabled = false }) => {
+            const baseStyle = "px-4 py-3 rounded-lg font-bold transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
+            const variants = {
+                primary: "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/50",
+                secondary: "bg-slate-700 hover:bg-slate-600 text-slate-200",
+                success: "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/50",
+                danger: "bg-rose-600 hover:bg-rose-500 text-white",
+                outline: "border-2 border-slate-600 hover:border-slate-400 text-slate-300 hover:bg-slate-800",
+                ghost: "bg-transparent hover:bg-slate-800 text-slate-400 hover:text-white"
+            };
+            return <button onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`} disabled={disabled}>{children}</button>;
+        };
+
+        // --- APP LOGIC ---
+        function App() {
+            const [gameState, setGameState] = useState('SCENES'); 
+            const [selectedScene, setSelectedScene] = useState(null);
+            const [selectedCharacterData, setSelectedCharacterData] = useState(null);
+            
+            // Test States
+            const [testMode, setTestMode] = useState(null); 
+            const [currentLineIndex, setCurrentLineIndex] = useState(0);
+            const [score, setScore] = useState(0);
+            const [lastAnswerCorrect, setLastAnswerCorrect] = useState(null);
+            const [shuffledIndices, setShuffledIndices] = useState([]);
+            const [currentOptions, setCurrentOptions] = useState([]);
+            const [selectedOption, setSelectedOption] = useState(null);
+
+            // Study States
+            const [hiddenLines, setHiddenLines] = useState({});
+            const [showAllLines, setShowAllLines] = useState(true);
+
+            // --- PROCESAMIENTO DE DATOS ---
+            const SCENES_LIST = useMemo(() => {
+                const scenes = new Set();
+                ACTORES.forEach(actor => {
+                    actor.lineas.forEach(l => scenes.add(l.e));
+                });
+                return Array.from(scenes).sort();
+            }, []);
+
+            const getCharactersInScene = (sceneName) => {
+                const characters = [];
+                ACTORES.forEach(actor => {
+                    const linesInScene = actor.lineas.filter(l => l.e === sceneName);
+                    if (linesInScene.length > 0) {
+                        const charName = linesInScene[0].p; 
+                        characters.push({
+                            characterName: charName,
+                            actorName: actor.nombre,
+                            lines: linesInScene,
+                            actorId: actor.id
+                        });
+                    }
+                });
+                return characters;
+            };
+
+            // --- NAVEGACIÓN ---
+            const goToSceneSelection = () => {
+                setGameState('SCENES');
+                setSelectedScene(null);
+                setSelectedCharacterData(null);
+            };
+
+            const selectScene = (sceneName) => {
+                setSelectedScene(sceneName);
+                setGameState('CHARACTERS');
+            };
+
+            const selectCharacter = (charData) => {
+                setSelectedCharacterData(charData);
+                setGameState('DASHBOARD');
+                setHiddenLines({});
+                setShowAllLines(true);
+            };
+
+            // --- LÓGICA DE TEST ---
+            const startTest = (mode) => {
+                setTestMode(mode);
+                setScore(0);
+                setLastAnswerCorrect(null);
+                setSelectedOption(null);
+
+                const lines = selectedCharacterData.lines;
+                const indices = Array.from({ length: lines.length }, (_, i) => i);
+                
+                if (mode === 'easy') {
+                    setCurrentLineIndex(0);
+                    generateOptions(lines[0], mode, lines);
+                } else {
+                    const shuffled = indices.sort(() => Math.random() - 0.5);
+                    setShuffledIndices(shuffled);
+                    setCurrentLineIndex(0);
+                    generateOptions(lines[shuffled[0]], mode, lines);
+                }
+                setGameState('PLAYING');
+            };
+
+            const generateOptions = (currentLine, mode, allCharacterLines) => {
+                let distractors = [];
+                
+                if (mode === 'easy') {
+                    // Distractores de OTROS actores
+                    const otherActorsLines = ACTORES
+                        .filter(a => a.id !== selectedCharacterData.actorId)
+                        .flatMap(a => a.lineas)
+                        .map(l => l.t);
+                    distractors = otherActorsLines.sort(() => 0.5 - Math.random()).slice(0, 3);
+                } else {
+                    // Distractores del MISMO personaje en la MISMA escena
+                    const sameSceneLines = allCharacterLines.filter(l => l.t !== currentLine.t);
+                    
+                    if (sameSceneLines.length >= 3) {
+                         distractors = sameSceneLines.sort(() => 0.5 - Math.random()).slice(0, 3).map(l => l.t);
+                    } else {
+                        // Si no hay suficientes, coger de otras escenas del mismo actor
+                        const otherSceneLines = ACTORES
+                            .find(a => a.id === selectedCharacterData.actorId)
+                            .lineas.filter(l => l.t !== currentLine.t)
+                            .map(l => l.t);
+                        distractors = otherSceneLines.sort(() => 0.5 - Math.random()).slice(0, 3);
+                    }
+                }
+                
+                while(distractors.length < 3) distractors.push("...(Silencio)...");
+                const options = [currentLine.t, ...distractors].sort(() => Math.random() - 0.5);
+                setCurrentOptions(options);
+            };
+
+            const handleAnswer = (answer) => {
+                if (selectedOption) return;
+                setSelectedOption(answer);
+
+                const lines = selectedCharacterData.lines;
+                const actualIndex = testMode === 'easy' ? currentLineIndex : shuffledIndices[currentLineIndex];
+                const correctLine = lines[actualIndex];
+                const isCorrect = answer === correctLine.t;
+
+                setLastAnswerCorrect(isCorrect);
+                if (isCorrect) setScore(s => s + 1);
+
+                setTimeout(() => nextQuestion(), 1500);
+            };
+
+            const nextQuestion = () => {
+                const lines = selectedCharacterData.lines;
+                const nextIndex = currentLineIndex + 1;
+                
+                if (nextIndex >= lines.length) {
+                    setGameState('RESULT');
+                } else {
+                    setCurrentLineIndex(nextIndex);
+                    setLastAnswerCorrect(null);
+                    setSelectedOption(null);
+                    const actualIndex = testMode === 'easy' ? nextIndex : shuffledIndices[nextIndex];
+                    generateOptions(lines[actualIndex], testMode, lines);
+                }
+            };
+
+            // --- VISTAS ---
+            const renderScenes = () => (
+                <div className="max-w-4xl mx-auto w-full animate-fade-in px-4 py-8">
+                    <h1 className="text-3xl md:text-5xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-yellow-500 mb-2">
+                        Elige la Escena
+                    </h1>
+                    <p className="text-center text-slate-400 mb-8">¿Qué vamos a ensayar hoy?</p>
+                    <div className="grid gap-4">
+                        {SCENES_LIST.map((scene, idx) => (
+                            <button key={idx} onClick={() => selectScene(scene)} className="group flex items-center p-6 bg-slate-800 rounded-xl border border-slate-700 hover:border-amber-500 hover:bg-slate-750 transition-all text-left shadow-lg hover:-translate-y-1">
+                                <div className="bg-amber-900/20 text-amber-500 p-4 rounded-lg mr-4 group-hover:bg-amber-500 group-hover:text-white transition-colors"><Icons.Clapperboard /></div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white group-hover:text-amber-400">{scene}</h3>
+                                    <p className="text-sm text-slate-500 mt-1">{getCharactersInScene(scene).length} personajes</p>
+                                </div>
+                                <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-amber-500">➜</div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            const renderCharacters = () => {
+                const characters = getCharactersInScene(selectedScene);
+                return (
+                    <div className="max-w-4xl mx-auto w-full animate-fade-in px-4 py-8">
+                        <div className="flex items-center mb-8">
+                            <Button variant="ghost" onClick={goToSceneSelection}><Icons.ArrowLeft /> Escenas</Button>
+                        </div>
+                        <h2 className="text-2xl md:text-4xl font-bold text-center text-white mb-2">{selectedScene}</h2>
+                        <p className="text-center text-slate-400 mb-8">Selecciona tu personaje para esta escena</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {characters.map((char, idx) => (
+                                <button key={idx} onClick={() => selectCharacter(char)} className="relative overflow-hidden p-6 bg-slate-800 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all hover:shadow-2xl text-left group">
+                                    <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20"><Icons.User /></div>
+                                    <h3 className="text-xl font-bold text-white mb-1 group-hover:text-indigo-400">{char.characterName}</h3>
+                                    <p className="text-sm text-slate-500">Interpretado por: <span className="text-slate-300">{char.actorName}</span></p>
+                                    <div className="mt-4 text-xs font-mono bg-slate-900/50 inline-block px-2 py-1 rounded text-indigo-300 border border-indigo-900/30">{char.lines.length} intervenciones</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderDashboard = () => (
+                <div className="max-w-4xl mx-auto w-full px-4 animate-fade-in py-8">
+                    <div className="flex items-center gap-4 mb-8">
+                        <Button variant="ghost" onClick={() => setGameState('CHARACTERS')}><Icons.ArrowLeft /> Volver</Button>
+                        <div>
+                            <div className="text-xs text-indigo-400 font-bold uppercase tracking-widest">{selectedScene}</div>
+                            <h2 className="text-3xl md:text-4xl font-bold text-white">{selectedCharacterData.characterName}</h2>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card onClick={() => setGameState('STUDY')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-emerald-500 group">
+                            <div className="mb-4 bg-emerald-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform"><Icons.Book /></div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Estudiar Guion</h3>
+                            <p className="text-slate-400 mb-6">Lee tus frases en orden para esta escena. Oculta el texto para memorizar.</p>
+                            <Button variant="success" className="w-full">Entrar</Button>
+                        </Card>
+                        <Card onClick={() => setGameState('CONFIG_TEST')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-indigo-500 group">
+                            <div className="mb-4 bg-indigo-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform"><Icons.Brain /></div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Modo Test</h3>
+                            <p className="text-slate-400 mb-6">Ponte a prueba con preguntas aleatorias solo de esta escena.</p>
+                            <Button variant="primary" className="w-full">Configurar</Button>
+                        </Card>
+                    </div>
+                </div>
+            );
+
+            const renderStudy = () => (
+                <div className="max-w-3xl mx-auto w-full px-4 pb-20 animate-fade-in pt-4">
+                    <div className="sticky top-0 z-20 bg-slate-950/95 backdrop-blur-sm py-4 border-b border-slate-800 flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <Button variant="ghost" size="sm" onClick={() => setGameState('DASHBOARD')}><Icons.ArrowLeft /></Button>
+                            <div className="flex flex-col truncate">
+                                <span className="text-xs text-slate-500 font-bold uppercase">{selectedCharacterData.characterName}</span>
+                                <span className="font-bold text-white truncate text-sm md:text-base">{selectedScene}</span>
+                            </div>
+                        </div>
+                        <Button variant="secondary" onClick={() => {
+                            const newState = !showAllLines;
+                            setShowAllLines(newState);
+                            const newHidden = {};
+                            selectedCharacterData.lines.forEach((l, i) => newHidden[i] = !newState);
+                            setHiddenLines(newHidden);
+                        }}>{showAllLines ? <><Icons.EyeOff /> Ocultar</> : <><Icons.Eye /> Mostrar</>}</Button>
+                    </div>
+                    <div className="space-y-6">
+                        {selectedCharacterData.lines.map((line, idx) => {
+                            const isHidden = hiddenLines[idx];
+                            return (
+                                <div key={idx} className="animate-fade-in">
+                                    <div className={`relative rounded-xl border transition-all ${isHidden ? 'bg-slate-900 border-slate-800' : 'bg-slate-800/50 border-slate-700'}`}>
+                                        <div className="p-5">
+                                            <div className="text-sm text-slate-500 italic mb-3 pl-3 border-l-2 border-slate-600">Pie: "{line.cue}"</div>
+                                            <div className="flex gap-4">
+                                                <div className="shrink-0 mt-1"><span className="text-[10px] font-bold bg-indigo-900 text-indigo-200 px-2 py-1 rounded">{line.p}</span></div>
+                                                <div onClick={() => setHiddenLines(prev => ({...prev, [idx]: !prev[idx]}))} className={`flex-1 text-lg cursor-pointer select-none rounded p-2 -ml-2 transition-all ${isHidden ? 'bg-slate-800 text-transparent' : 'text-slate-200'}`}>{isHidden ? "Clic para revelar..." : line.t}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+
+            const renderTestConfig = () => (
+                <div className="max-w-2xl mx-auto w-full px-4 py-12 animate-fade-in text-center">
+                    <h2 className="text-3xl font-bold text-white mb-2">Configura el Test</h2>
+                    <p className="text-slate-400 mb-8">{selectedScene} - {selectedCharacterData.characterName}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <button onClick={() => startTest('easy')} className="p-8 rounded-xl bg-slate-800 border-2 border-slate-700 hover:border-emerald-500 transition-all group text-left">
+                            <div className="text-emerald-400 mb-4 font-bold text-xl flex items-center gap-2"><Icons.Book /> Modo Fácil</div>
+                            <p className="text-slate-400 text-sm">Preguntas en orden. Respuestas incorrectas muy obvias (otros personajes).</p>
+                        </button>
+                        <button onClick={() => startTest('hard')} className="p-8 rounded-xl bg-slate-800 border-2 border-slate-700 hover:border-rose-500 transition-all group text-left">
+                            <div className="text-rose-400 mb-4 font-bold text-xl flex items-center gap-2"><Icons.Brain /> Modo Difícil</div>
+                            <p className="text-slate-400 text-sm">Preguntas aleatorias. Respuestas incorrectas son frases tuyas de la misma escena.</p>
+                        </button>
+                    </div>
+                    <Button variant="ghost" className="mt-8 mx-auto" onClick={() => setGameState('DASHBOARD')}>Cancelar</Button>
+                </div>
+            );
+
+            const renderPlaying = () => {
+                const lines = selectedCharacterData.lines;
+                const actualIndex = testMode === 'easy' ? currentLineIndex : shuffledIndices[currentLineIndex];
+                const line = lines[actualIndex];
+                return (
+                    <div className="max-w-2xl mx-auto w-full px-4 py-8 animate-fade-in flex flex-col h-screen md:h-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <Button variant="ghost" onClick={() => setGameState('DASHBOARD')}>Salir</Button>
+                            <span className="text-slate-400 font-mono">{currentLineIndex + 1} / {lines.length}</span>
+                        </div>
+                        <div className="bg-slate-800 rounded-2xl p-6 md:p-10 mb-6 border-t-4 border-indigo-500 shadow-2xl">
+                            <div className="text-center mb-8">
+                                <p className="text-xs uppercase text-slate-500 font-bold mb-2">PIE (Lo que dicen antes)</p>
+                                <p className="text-xl text-slate-300 italic">"{line.cue}"</p>
+                            </div>
+                            <div className="text-center text-white font-bold text-2xl">¿Cuál es tu frase?</div>
+                        </div>
+                        <div className="space-y-3 flex-1 overflow-y-auto">
+                            {currentOptions.map((opt, i) => {
+                                let style = "bg-slate-800 border-2 border-slate-700 hover:border-indigo-500";
+                                if (selectedOption) {
+                                    if (opt === line.t) style = "bg-emerald-900/50 border-emerald-500 text-emerald-100";
+                                    else if (opt === selectedOption) style = "bg-rose-900/50 border-rose-500 text-rose-100";
+                                    else style = "bg-slate-900 border-transparent opacity-50";
+                                }
+                                return <button key={i} onClick={() => handleAnswer(opt)} disabled={!!selectedOption} className={`w-full p-4 rounded-xl text-left transition-all ${style}`}>{opt}</button>;
+                            })}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderResult = () => (
+                <div className="max-w-md mx-auto w-full px-4 py-12 text-center animate-fade-in">
+                    <div className="inline-block p-6 rounded-full bg-slate-800 mb-6 relative">
+                        <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 rounded-full"></div>
+                        <span className="text-6xl relative z-10">🏆</span>
+                    </div>
+                    <h2 className="text-4xl font-bold text-white mb-2">{Math.round((score/selectedCharacterData.lines.length)*100)}% Aciertos</h2>
+                    <p className="text-slate-400 mb-8">Has repasado {selectedCharacterData.characterName} en {selectedScene}</p>
+                    <div className="flex gap-4 justify-center">
+                        <Button variant="secondary" onClick={() => setGameState('DASHBOARD')}>Volver</Button>
+                        <Button onClick={() => startTest(testMode)}>Repetir</Button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-indigo-500/30">
+                    {gameState === 'SCENES' && renderScenes()}
+                    {gameState === 'CHARACTERS' && renderCharacters()}
+                    {gameState === 'DASHBOARD' && renderDashboard()}
+                    {gameState === 'STUDY' && renderStudy()}
+                    {gameState === 'CONFIG_TEST' && renderTestConfig()}
+                    {gameState === 'PLAYING' && renderPlaying()}
+                    {gameState === 'RESULT' && renderResult()}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
