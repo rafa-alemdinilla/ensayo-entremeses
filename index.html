@@ -208,21 +208,24 @@
                 
                 if (index === -1) return { error: "Frase no encontrada exactamente en el texto." };
 
-                // Buscar hacia ADELANTE en el texto posterior
+                // Buscar hacia atrás para el anterior y página
+                const textBefore = scriptText.substring(0, index);
                 const textAfter = scriptText.substring(index);
                 
-                // Buscar el primer número de página que aparezca después
-                const pageMatchNext = textAfter.match(/[\n\r]\s*(\d+)\s*[\n\r]/);
-                const page = pageMatchNext ? pageMatchNext[1].trim() : "?";
-                
+                // Buscar número de página (simplificado: busca números solos entre saltos de línea hacia atrás)
+                // Esto es aproximado.
+                const pageMatch = textBefore.match(/[\n\r]\s*(\d+)\s*[\n\r]/g);
+                const page = pageMatch ? pageMatch[pageMatch.length - 1].trim() : "?";
+
                 // Líneas circundantes (búsqueda simple por saltos de línea)
-              
+                const linesBefore = textBefore.split('\n').filter(l => l.trim().length > 0);
                 const linesAfter = textAfter.split('\n').filter(l => l.trim().length > 0);
 
                 // La línea actual es la primera de linesAfter (o parte de ella)
-                // Contexto: Las 2 siguientes
+                // Contexto: Las 2 anteriores y las 2 siguientes
                 return {
                     page: page,
+                    prev: linesBefore.slice(-7),
                     next: linesAfter.slice(1, 5) // Saltamos la 0 que es la actual
                 };
             };
@@ -865,5 +868,3 @@
     </script>
 </body>
 </html>
-
-
