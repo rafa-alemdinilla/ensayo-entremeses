@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entremeses - Ensayo Teatral Pro</title>
+    <title>Entremeses - Asistente de Ensayo</title>
     <!-- Carga de Librerías -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -15,8 +15,10 @@
         body { font-family: 'Inter', sans-serif; background-color: #020617; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out; }
         .animate-slide-in { animation: slideIn 0.3s ease-out; }
+        .animate-pop { animation: pop 0.2s ease-out; }
         
         /* Scrollbar personalizada */
         ::-webkit-scrollbar { width: 8px; }
@@ -31,34 +33,30 @@
     <!-- 1. CARGAMOS TUS DATOS (Asegúrate de que datos.js está en la misma carpeta) -->
     <script src="datos.js"></script>
 
-    <!-- 2. LÓGICA DE LA APLICACIÓN MEJORADA -->
+    <!-- 2. LÓGICA DE LA APLICACIÓN -->
     <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
+        const { useState, useMemo, useEffect, useRef } = React;
 
         // Verificación de seguridad
         if (!window.GUION_DATA) {
-            alert("⚠️ Error: No se encuentra el archivo datos.js. Asegúrate de que ambos archivos estén en la misma carpeta.");
+            alert("⚠️ Error: No se encuentra el archivo datos.js.");
         }
 
         const ACTORES = window.GUION_DATA || [];
 
-        // --- SISTEMA DE SONIDO (Sintetizador Web Audio API) ---
+        // --- SISTEMA DE SONIDO ---
         const playSound = (type) => {
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContext) return;
-                
                 const ctx = new AudioContext();
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
-                
                 osc.connect(gain);
                 gain.connect(ctx.destination);
-
                 const now = ctx.currentTime;
 
                 if (type === 'correct') {
-                    // Sonido agudo y alegre (Seno)
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(600, now);
                     osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
@@ -67,7 +65,6 @@
                     osc.start(now);
                     osc.stop(now + 0.4);
                 } else if (type === 'wrong') {
-                    // Sonido grave y seco (Diente de sierra)
                     osc.type = 'sawtooth';
                     osc.frequency.setValueAtTime(150, now);
                     osc.frequency.linearRampToValueAtTime(100, now + 0.2);
@@ -76,9 +73,7 @@
                     osc.start(now);
                     osc.stop(now + 0.3);
                 }
-            } catch (e) {
-                console.error("Audio error", e);
-            }
+            } catch (e) { console.error(e); }
         };
 
         // --- ICONOS ---
@@ -102,7 +97,10 @@
             SortDesc: (props) => <Icon {...props} d={<><path d="M11 5h10"/><path d="M11 9h7"/><path d="M11 13h4"/><path d="M3 17l3 3 3-3"/><path d="M6 18V4"/></>} />,
             SortAsc: (props) => <Icon {...props} d={<><path d="M11 5h10"/><path d="M11 9h7"/><path d="M11 13h4"/><path d="M3 11V4"/><path d="M3 4l3-3 3 3"/></>} />,
             Play: (props) => <Icon {...props} d={<polygon points="5 3 19 12 5 21 5 3" />} />,
-            ArrowRight: (props) => <Icon {...props} d={<path d="M5 12h14M12 5l7 7-7 7"/>} />
+            ArrowRight: (props) => <Icon {...props} d={<path d="M5 12h14M12 5l7 7-7 7"/>} />,
+            Fire: (props) => <Icon {...props} d={<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.6-3.3.7 1.9 2.1 2.8 2.9 2.8z"/>} />,
+            TextSize: (props) => <Icon {...props} d={<><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></>} />,
+            FileText: (props) => <Icon {...props} d={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>} />
         };
 
         // --- UI HELPERS ---
@@ -133,27 +131,45 @@
                     <span>{Math.round((current / total) * 100)}%</span>
                 </div>
                 <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden">
-                    <div 
-                        className="h-full bg-indigo-500 transition-all duration-500 ease-out" 
-                        style={{ width: `${(current / total) * 100}%` }}
-                    ></div>
+                    <div className="h-full bg-indigo-500 transition-all duration-500 ease-out" style={{ width: `${(current / total) * 100}%` }}></div>
                 </div>
             </div>
         );
 
-        // --- APP LOGIC ---
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl animate-pop">
+                        <div className="flex justify-between items-center p-4 border-b border-slate-800">
+                            <h3 className="font-bold text-lg text-white flex items-center gap-2">{title}</h3>
+                            <button onClick={onClose} className="text-slate-400 hover:text-white"><Icons.X size={24} /></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- APP COMPONENT ---
         function App() {
+            // Estado Global
+            const [scriptText, setScriptText] = useState(null);
             const [gameState, setGameState] = useState('SCENES'); 
             const [selectedScene, setSelectedScene] = useState(null);
             const [selectedCharacterData, setSelectedCharacterData] = useState(null);
             const [searchQuery, setSearchQuery] = useState("");
-            const [sortMethod, setSortMethod] = useState('lines'); // 'alpha', 'lines'
-            
+            const [sortMethod, setSortMethod] = useState('lines'); 
+            const [fontSize, setFontSize] = useState(1); // Escala de fuente (1 = 100%)
+
             // Test States
             const [testMode, setTestMode] = useState(null); 
-            const [testQuestions, setTestQuestions] = useState([]); // Lista de preguntas (normales o falladas)
+            const [testQuestions, setTestQuestions] = useState([]);
             const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
             const [score, setScore] = useState(0);
+            const [streak, setStreak] = useState(0); // Racha
             const [lastAnswerCorrect, setLastAnswerCorrect] = useState(null);
             const [currentOptions, setCurrentOptions] = useState([]);
             const [selectedOption, setSelectedOption] = useState(null);
@@ -163,8 +179,71 @@
             const [hiddenLines, setHiddenLines] = useState({});
             const [showAllLines, setShowAllLines] = useState(true);
             const [onlyCuesMode, setOnlyCuesMode] = useState(false);
-            const [rehearsalIndex, setRehearsalIndex] = useState(0); // Para el modo "Paso a paso"
-            const [rehearsalRevealed, setRehearsalRevealed] = useState(false);
+            const [rehearsalIndex, setRehearsalIndex] = useState(0); 
+            const [rehearsalRevealed, setRehearsalRevealed] = useState(false); // Si la frase se está mostrando temporalmente
+            const [rehearsalShowing, setRehearsalShowing] = useState(false); // Controla la visibilidad de la frase
+
+            // Contexto
+            const [contextModalOpen, setContextModalOpen] = useState(false);
+            const [contextData, setContextData] = useState(null);
+
+            // --- CARGAR GUION ---
+            useEffect(() => {
+                fetch('ENTREMESES-OK.txt')
+                    .then(response => {
+                        if (!response.ok) throw new Error("No se pudo cargar el archivo");
+                        return response.text();
+                    })
+                    .then(text => setScriptText(text))
+                    .catch(err => console.log("Guion completo no disponible todavía (subir a GitHub)."));
+            }, []);
+
+            // --- BUSCADOR DE CONTEXTO ---
+            const findContext = (lineText) => {
+                if (!scriptText) return null;
+                
+                // Normalizar para búsqueda (quitar espacios extra, etc)
+                const cleanLine = lineText.trim().substring(0, 20); // Buscar por los primeros 20 caracteres para evitar errores de puntuación
+                const index = scriptText.indexOf(cleanLine);
+                
+                if (index === -1) return { error: "Frase no encontrada exactamente en el texto." };
+
+                // Buscar hacia atrás para el anterior y página
+                const textBefore = scriptText.substring(0, index);
+                const textAfter = scriptText.substring(index);
+                
+                // Buscar número de página (simplificado: busca números solos entre saltos de línea hacia atrás)
+                // Esto es aproximado.
+                const pageMatch = textBefore.match(/[\n\r]\s*(\d+)\s*[\n\r]/g);
+                const page = pageMatch ? pageMatch[pageMatch.length - 1].trim() : "?";
+
+                // Líneas circundantes (búsqueda simple por saltos de línea)
+                const linesBefore = textBefore.split('\n').filter(l => l.trim().length > 0);
+                const linesAfter = textAfter.split('\n').filter(l => l.trim().length > 0);
+
+                // La línea actual es la primera de linesAfter (o parte de ella)
+                // Contexto: Las 2 anteriores y las 2 siguientes
+                return {
+                    page: page,
+                    prev: linesBefore.slice(-3),
+                    next: linesAfter.slice(1, 4) // Saltamos la 0 que es la actual
+                };
+            };
+
+            const openContext = (lineText) => {
+                if (!scriptText) {
+                    alert("⚠️ El archivo de guion (ENTREMESES-OK.txt) no se ha cargado. Asegúrate de subirlo a GitHub.");
+                    return;
+                }
+                const ctx = findContext(lineText);
+                setContextData(ctx);
+                setContextModalOpen(true);
+            };
+
+            // --- ESTILOS DINÁMICOS DE FUENTE ---
+            const fontStyle = { fontSize: `${fontSize}rem` };
+            const fontStyleLg = { fontSize: `${fontSize * 1.25}rem` };
+            const fontStyleXl = { fontSize: `${fontSize * 1.5}rem` };
 
             // --- PROCESAMIENTO DE DATOS ---
             const SCENES_LIST = useMemo(() => {
@@ -198,6 +277,7 @@
                 setSelectedScene(null);
                 setSelectedCharacterData(null);
                 setSearchQuery("");
+                setStreak(0);
             };
 
             const selectScene = (sceneName) => {
@@ -214,41 +294,52 @@
                 setOnlyCuesMode(false);
             };
 
-            // --- LÓGICA DE ENSAYO PASO A PASO ---
+            // --- LÓGICA DE ENSAYO PASO A PASO (MEJORADA) ---
             const startRehearsal = () => {
                 setRehearsalIndex(0);
+                setRehearsalShowing(false);
                 setRehearsalRevealed(false);
                 setGameState('REHEARSAL');
+            };
+
+            const handleRehearsalReveal = () => {
+                // Mostrar frase
+                setRehearsalShowing(true);
+                setRehearsalRevealed(true); // Indicar que ya se ha revelado (para cambiar el botón a "Volver a ver")
+
+                // Temporizador de 2 segundos para ocultar
+                setTimeout(() => {
+                    setRehearsalShowing(false);
+                }, 2000);
             };
 
             const nextRehearsalLine = () => {
                 const next = rehearsalIndex + 1;
                 if (next < selectedCharacterData.lines.length) {
                     setRehearsalIndex(next);
-                    setRehearsalRevealed(false);
+                    setRehearsalShowing(false);
+                    setRehearsalRevealed(false); // Reset para la nueva línea
                 } else {
-                    // Fin del ensayo
                     setGameState('DASHBOARD');
                 }
             };
 
-            // --- LÓGICA DE TEST MEJORADA ---
+            // --- LÓGICA DE TEST ---
             const startTest = (mode, questionsToUse = null) => {
                 setTestMode(mode);
                 setScore(0);
+                setStreak(0);
                 setLastAnswerCorrect(null);
                 setSelectedOption(null);
                 setFailedQuestions([]);
                 setCurrentQuestionIndex(0);
 
                 let questions = [];
-                
                 if (questionsToUse) {
                     questions = questionsToUse;
                 } else {
                     const allLines = selectedCharacterData.lines;
                     const indices = Array.from({ length: allLines.length }, (_, i) => i);
-                    
                     if (mode === 'easy') {
                         questions = indices.map(i => allLines[i]);
                     } else {
@@ -256,7 +347,6 @@
                         questions = shuffledIndices.map(i => allLines[i]);
                     }
                 }
-                
                 setTestQuestions(questions);
                 generateOptions(questions[0], mode);
                 setGameState('PLAYING');
@@ -284,7 +374,6 @@
                         distractors = otherSceneLines.sort(() => 0.5 - Math.random()).slice(0, 3);
                     }
                 }
-                
                 while(distractors.length < 3) distractors.push("...(Silencio)...");
                 const options = [currentLine.t, ...distractors].sort(() => Math.random() - 0.5);
                 setCurrentOptions(options);
@@ -298,14 +387,14 @@
                 const isCorrect = answer === currentQ.t;
 
                 setLastAnswerCorrect(isCorrect);
-                
-                // EFECTO DE SONIDO
                 playSound(isCorrect ? 'correct' : 'wrong');
 
                 if (isCorrect) {
                     setScore(s => s + 1);
+                    setStreak(s => s + 1);
                 } else {
                     setFailedQuestions(prev => [...prev, currentQ]);
+                    setStreak(0);
                 }
 
                 setTimeout(() => nextQuestion(), 1500);
@@ -313,7 +402,6 @@
 
             const nextQuestion = () => {
                 const nextIndex = currentQuestionIndex + 1;
-                
                 if (nextIndex >= testQuestions.length) {
                     setGameState('RESULT');
                 } else {
@@ -353,25 +441,16 @@
                     c.actorName.toLowerCase().includes(searchQuery.toLowerCase())
                 );
 
-                // LÓGICA DE ORDENACIÓN (SWITCH)
-                filteredChars.sort((a, b) => {
-                    if (sortMethod === 'alpha') {
-                        return a.characterName.localeCompare(b.characterName);
-                    } else {
-                        return b.lines.length - a.lines.length;
-                    }
-                });
+                filteredChars.sort((a, b) => sortMethod === 'alpha' ? a.characterName.localeCompare(b.characterName) : b.lines.length - a.lines.length);
 
                 return (
                     <div className="max-w-4xl mx-auto w-full animate-fade-in px-4 py-8">
                         <div className="flex items-center mb-6">
                             <Button variant="ghost" onClick={goToSceneSelection}><Icons.ArrowLeft /> Escenas</Button>
                         </div>
-                        
                         <h2 className="text-2xl md:text-4xl font-bold text-center text-white mb-2">{selectedScene}</h2>
                         
                         <div className="flex flex-col md:flex-row gap-4 mb-8 items-center max-w-2xl mx-auto">
-                            {/* Buscador */}
                             <div className="relative w-full">
                                 <input 
                                     type="text" 
@@ -382,21 +461,9 @@
                                 />
                                 <div className="absolute left-3 top-3.5 text-slate-500"><Icons.Search size={18} /></div>
                             </div>
-                            
-                            {/* Switch de Ordenación */}
                             <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700 shrink-0">
-                                <button 
-                                    onClick={() => setSortMethod('lines')}
-                                    className={`px-3 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${sortMethod === 'lines' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    <Icons.SortDesc size={16} /> Intervenciones
-                                </button>
-                                <button 
-                                    onClick={() => setSortMethod('alpha')}
-                                    className={`px-3 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${sortMethod === 'alpha' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    <Icons.SortAsc size={16} /> A-Z
-                                </button>
+                                <button onClick={() => setSortMethod('lines')} className={`px-3 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${sortMethod === 'lines' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.SortDesc size={16} /> Interv.</button>
+                                <button onClick={() => setSortMethod('alpha')} className={`px-3 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${sortMethod === 'alpha' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}><Icons.SortAsc size={16} /> A-Z</button>
                             </div>
                         </div>
 
@@ -409,9 +476,6 @@
                                     <div className="mt-4 text-xs font-mono bg-slate-900/50 inline-block px-2 py-1 rounded text-indigo-300 border border-indigo-900/30">{char.lines.length} intervenciones</div>
                                 </button>
                             ))}
-                            {filteredChars.length === 0 && (
-                                <p className="text-center text-slate-500 col-span-full py-8">No se encontraron personajes.</p>
-                            )}
                         </div>
                     </div>
                 );
@@ -427,32 +491,29 @@
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Nuevo Modo: Ensayo Guiado */}
                         <Card onClick={startRehearsal} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-amber-500 group transform transition hover:scale-[1.02]">
                             <div className="mb-4 bg-amber-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform"><Icons.Play /></div>
                             <h3 className="text-2xl font-bold text-white mb-2">Ensayo Guiado</h3>
-                            <p className="text-slate-400 mb-6">Paso a paso. Ve el pie, recita tu frase y comprueba. Ideal para memorizar el flujo.</p>
+                            <p className="text-slate-400 mb-6">Paso a paso. Ve el pie, recita tu frase y comprueba. Flujo real.</p>
                             <Button variant="secondary" className="w-full">Comenzar</Button>
                         </Card>
-
                         <Card onClick={() => setGameState('STUDY')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-emerald-500 group transform transition hover:scale-[1.02]">
                             <div className="mb-4 bg-emerald-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform"><Icons.Book /></div>
                             <h3 className="text-2xl font-bold text-white mb-2">Leer Guion</h3>
-                            <p className="text-slate-400 mb-6">Lee todas tus frases en lista. Oculta el texto o deja solo los pies.</p>
+                            <p className="text-slate-400 mb-6">Estudia con el texto completo. Oculta tus frases para memorizar.</p>
                             <Button variant="success" className="w-full">Leer</Button>
                         </Card>
-
                         <Card onClick={() => setGameState('CONFIG_TEST')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-indigo-500 group transform transition hover:scale-[1.02]">
                             <div className="mb-4 bg-indigo-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform"><Icons.Brain /></div>
                             <h3 className="text-2xl font-bold text-white mb-2">Modo Test</h3>
-                            <p className="text-slate-400 mb-6">Ponte a prueba con preguntas interactivas y repasa tus fallos.</p>
+                            <p className="text-slate-400 mb-6">Ponte a prueba con preguntas y gana rachas de aciertos.</p>
                             <Button variant="primary" className="w-full">Configurar</Button>
                         </Card>
                     </div>
                 </div>
             );
 
-            // --- NUEVO MODO: ENSAYO GUIADO (Rehearsal) ---
+            // --- MODO ENSAYO GUIADO (MEJORADO) ---
             const renderRehearsal = () => {
                 const currentLine = selectedCharacterData.lines[rehearsalIndex];
                 const total = selectedCharacterData.lines.length;
@@ -461,45 +522,72 @@
                     <div className="max-w-2xl mx-auto w-full px-4 py-8 animate-fade-in flex flex-col min-h-screen md:min-h-0 md:h-auto">
                         <div className="flex justify-between items-center mb-6">
                             <Button size="small" variant="ghost" onClick={() => setGameState('DASHBOARD')}><Icons.X size={18} /> Salir</Button>
-                            <span className="text-slate-400 font-mono text-sm">Línea {rehearsalIndex + 1} de {total}</span>
+                            
+                            {/* Control de fuente */}
+                            <div className="flex items-center gap-1 bg-slate-800 rounded p-1">
+                                <button onClick={() => setFontSize(s => Math.max(0.8, s - 0.1))} className="p-1 hover:bg-slate-700 rounded"><Icons.TextSize size={14}/>-</button>
+                                <span className="text-xs font-mono w-8 text-center">{Math.round(fontSize*100)}%</span>
+                                <button onClick={() => setFontSize(s => Math.min(2, s + 0.1))} className="p-1 hover:bg-slate-700 rounded"><Icons.TextSize size={18}/></button>
+                            </div>
                         </div>
 
-                        <div className="flex-1 flex flex-col gap-6">
-                            {/* Tarjeta del PIE */}
+                        <span className="text-center text-slate-400 font-mono text-sm mb-4">Línea {rehearsalIndex + 1} de {total}</span>
+
+                        <div className="flex-1 flex flex-col gap-6 relative">
+                            {/* Tarjeta PIE */}
                             <div className="bg-slate-800 p-8 rounded-2xl border-t-4 border-indigo-500 shadow-xl relative overflow-hidden">
                                 <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.User size={64}/></div>
-                                <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-4">PIE (Lo que dicen antes)</p>
-                                <p className="text-2xl md:text-3xl text-white font-serif italic leading-relaxed">
+                                <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-4">PIE (Anterior)</p>
+                                <p className="text-slate-200 font-serif italic leading-relaxed" style={fontStyleXl}>
                                     "{currentLine.cue}"
                                 </p>
+                                <button 
+                                    onClick={() => openContext(currentLine.t)}
+                                    className="mt-4 text-xs flex items-center gap-1 text-slate-500 hover:text-indigo-400 transition-colors"
+                                >
+                                    <Icons.FileText size={14}/> Ver Contexto
+                                </button>
                             </div>
 
-                            {/* Tarjeta de la RESPUESTA */}
-                            <div className={`transition-all duration-500 ${rehearsalRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                                <div className="bg-emerald-900/20 p-8 rounded-2xl border border-emerald-900/50 shadow-xl relative">
+                            {/* Tarjeta RESPUESTA */}
+                            <div className={`transition-all duration-300 ${rehearsalShowing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                                <div className="bg-emerald-900/20 p-8 rounded-2xl border border-emerald-900/50 shadow-xl relative overflow-hidden">
+                                    {/* Barra de progreso de lectura */}
+                                    {rehearsalShowing && (
+                                        <div className="absolute top-0 left-0 h-1 bg-emerald-400 animate-[width_2s_linear] w-full"></div>
+                                    )}
                                     <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">TU FRASE ({currentLine.p})</p>
-                                    <p className="text-xl md:text-2xl text-emerald-100 font-medium leading-relaxed">
+                                    <p className="text-emerald-100 font-medium leading-relaxed" style={fontStyleXl}>
                                         {currentLine.t}
                                     </p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Botonera Fija Abajo */}
-                        <div className="mt-8 pt-4 border-t border-slate-800">
-                            {!rehearsalRevealed ? (
-                                <button 
-                                    onClick={() => setRehearsalRevealed(true)}
-                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-6 rounded-xl text-xl shadow-lg shadow-indigo-900/50 transition-all active:scale-95 flex items-center justify-center gap-3"
-                                >
-                                    <Icons.Eye size={24} /> Revelar mi frase
-                                </button>
-                            ) : (
+                        {/* Botonera */}
+                        <div className="mt-8 pt-4 border-t border-slate-800 grid grid-cols-1 gap-4">
+                            {/* Botón Principal (Revelar/Volver a ver) */}
+                            <button 
+                                onClick={handleRehearsalReveal}
+                                disabled={rehearsalShowing}
+                                className={`w-full text-white font-bold py-6 rounded-xl text-xl shadow-lg transition-all flex items-center justify-center gap-3
+                                    ${rehearsalShowing ? 'bg-slate-700 cursor-wait opacity-50' : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95'}`}
+                            >
+                                {rehearsalShowing ? "Memorizando..." : (
+                                    <>
+                                        <Icons.Eye size={24} /> 
+                                        {rehearsalRevealed ? "Volver a ver frase" : "Revelar mi frase"}
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Botón Siguiente (Solo aparece si ya has revelado al menos una vez) */}
+                            {rehearsalRevealed && !rehearsalShowing && (
                                 <button 
                                     onClick={nextRehearsalLine}
-                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-6 rounded-xl text-xl shadow-lg shadow-emerald-900/50 transition-all active:scale-95 flex items-center justify-center gap-3"
+                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 animate-fade-in"
                                 >
-                                    Siguiente Línea <Icons.ArrowRight size={24} />
+                                    Siguiente Pie <Icons.ArrowRight size={24} />
                                 </button>
                             )}
                         </div>
@@ -517,6 +605,12 @@
                                     <span className="text-xs text-slate-500 font-bold uppercase">{selectedCharacterData.characterName}</span>
                                     <span className="font-bold text-white truncate text-sm md:text-base">{selectedScene}</span>
                                 </div>
+                            </div>
+                            {/* Control de fuente */}
+                            <div className="flex items-center gap-1 bg-slate-800 rounded p-1">
+                                <button onClick={() => setFontSize(s => Math.max(0.8, s - 0.1))} className="p-1 hover:bg-slate-700 rounded"><Icons.TextSize size={14}/>-</button>
+                                <span className="text-xs font-mono w-8 text-center">{Math.round(fontSize*100)}%</span>
+                                <button onClick={() => setFontSize(s => Math.min(2, s + 0.1))} className="p-1 hover:bg-slate-700 rounded"><Icons.TextSize size={18}/></button>
                             </div>
                         </div>
                         
@@ -540,7 +634,7 @@
                                 selectedCharacterData.lines.forEach((l, i) => newHidden[i] = newMode); 
                                 setHiddenLines(newHidden);
                             }}>
-                                <span className="whitespace-nowrap">🎭 Solo Pies (Ensayo)</span>
+                                <span className="whitespace-nowrap">🎭 Solo Pies</span>
                             </Button>
                         </div>
                     </div>
@@ -552,7 +646,7 @@
                                 <div key={idx} className="animate-fade-in">
                                     <div className={`relative rounded-xl border transition-all duration-300 ${isHidden ? 'bg-slate-900 border-slate-800' : 'bg-slate-800/50 border-slate-700'}`}>
                                         <div className="p-5">
-                                            <div className="text-sm text-indigo-400 italic mb-3 pl-3 border-l-2 border-indigo-500/50">
+                                            <div className="text-sm text-indigo-400 italic mb-3 pl-3 border-l-2 border-indigo-500/50" style={fontStyle}>
                                                 <span className="text-xs font-bold text-slate-500 uppercase block mb-1">PIE:</span>
                                                 "{line.cue}"
                                             </div>
@@ -564,10 +658,16 @@
                                                 </div>
                                                 <div 
                                                     onClick={() => setHiddenLines(prev => ({...prev, [idx]: !prev[idx]}))}
-                                                    className={`flex-1 text-lg cursor-pointer select-none rounded p-3 -ml-2 transition-all duration-300 ${isHidden ? 'bg-slate-800 text-transparent hover:bg-slate-750' : 'text-slate-200'}`}
+                                                    className={`flex-1 cursor-pointer select-none rounded p-3 -ml-2 transition-all duration-300 ${isHidden ? 'bg-slate-800 text-transparent hover:bg-slate-750' : 'text-slate-200'}`}
+                                                    style={fontStyleLg}
                                                 >
-                                                    {isHidden ? "Clic para revelar tu frase..." : line.t}
+                                                    {isHidden ? "Clic para revelar..." : line.t}
                                                 </div>
+                                            </div>
+                                            <div className="mt-4 flex justify-end">
+                                                <button onClick={(e) => { e.stopPropagation(); openContext(line.t); }} className="text-xs text-slate-500 flex items-center gap-1 hover:text-indigo-400">
+                                                    <Icons.FileText size={14}/> Contexto
+                                                </button>
                                             </div>
                                         </div>
                                         <button 
@@ -584,49 +684,33 @@
                 </div>
             );
 
-            const renderTestConfig = () => (
-                <div className="max-w-2xl mx-auto w-full px-4 py-12 animate-fade-in text-center">
-                    <h2 className="text-3xl font-bold text-white mb-2">Configura el Test</h2>
-                    <p className="text-slate-400 mb-8">{selectedScene} - {selectedCharacterData.characterName}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <button onClick={() => startTest('easy')} className="p-8 rounded-xl bg-slate-800 border-2 border-slate-700 hover:border-emerald-500 transition-all group text-left relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.Book size={48} /></div>
-                            <div className="text-emerald-400 mb-4 font-bold text-xl flex items-center gap-2 relative z-10"><Icons.Book /> Modo Fácil</div>
-                            <p className="text-slate-400 text-sm relative z-10">Preguntas en orden. Respuestas incorrectas muy obvias (otros personajes). Ideal para empezar.</p>
-                        </button>
-                        <button onClick={() => startTest('hard')} className="p-8 rounded-xl bg-slate-800 border-2 border-slate-700 hover:border-rose-500 transition-all group text-left relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.Brain size={48} /></div>
-                            <div className="text-rose-400 mb-4 font-bold text-xl flex items-center gap-2 relative z-10"><Icons.Brain /> Modo Difícil</div>
-                            <p className="text-slate-400 text-sm relative z-10">Preguntas aleatorias. Respuestas incorrectas son frases tuyas de la misma escena. ¡Solo para expertos!</p>
-                        </button>
-                    </div>
-                    <Button variant="ghost" className="mt-8 mx-auto" onClick={() => setGameState('DASHBOARD')}>Cancelar</Button>
-                </div>
-            );
-
+            // --- RENDER TEST (Con Racha) ---
             const renderPlaying = () => {
                 const currentQuestion = testQuestions[currentQuestionIndex];
                 
                 return (
                     <div className="max-w-2xl mx-auto w-full px-4 py-8 animate-fade-in flex flex-col h-screen md:h-auto">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex justify-between items-center mb-4">
                             <Button size="small" variant="ghost" onClick={() => setGameState('DASHBOARD')}><Icons.X size={18} /> Salir</Button>
-                            <span className="text-xs font-bold text-indigo-400 bg-indigo-900/20 px-2 py-1 rounded border border-indigo-900/50">
-                                {testMode === 'easy' ? 'MODO FÁCIL' : 'MODO DIFÍCIL'}
-                            </span>
+                            
+                            {/* Racha */}
+                            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${streak > 2 ? 'bg-orange-500/20 text-orange-400 animate-pulse' : 'bg-slate-800 text-slate-500'}`}>
+                                <Icons.Fire size={18} />
+                                <span className="font-bold">{streak}</span>
+                            </div>
                         </div>
 
                         <div className="mb-6">
                             <ProgressBar 
                                 current={currentQuestionIndex + 1} 
                                 total={testQuestions.length} 
-                                label={`Pregunta ${currentQuestionIndex + 1} de ${testQuestions.length}`}
+                                label={`Pregunta ${currentQuestionIndex + 1}`}
                             />
                         </div>
 
                         <div className="bg-slate-800 rounded-2xl p-6 md:p-10 mb-6 border-t-4 border-indigo-500 shadow-2xl relative">
                             <div className="text-center mb-8">
-                                <p className="text-xs uppercase text-slate-500 font-bold mb-2 tracking-widest">PIE (Lo que dicen antes)</p>
+                                <p className="text-xs uppercase text-slate-500 font-bold mb-2 tracking-widest">PIE</p>
                                 <p className="text-xl md:text-2xl text-indigo-200 italic font-serif">"{currentQuestion.cue}"</p>
                             </div>
                             <div className="text-center text-white font-bold text-lg border-t border-slate-700 pt-6">
@@ -657,7 +741,7 @@
                                         disabled={!!selectedOption} 
                                         className={`w-full p-4 rounded-xl text-left transition-all duration-200 flex justify-between items-center ${style}`}
                                     >
-                                        <span>{opt}</span>
+                                        <span style={fontStyle}>{opt}</span>
                                         {icon}
                                     </button>
                                 );
@@ -666,6 +750,61 @@
                     </div>
                 );
             };
+
+            // --- RENDERIZADO DEL CONTEXTO (MODAL) ---
+            const renderContextModal = () => {
+                return (
+                    <Modal 
+                        isOpen={contextModalOpen} 
+                        onClose={() => setContextModalOpen(false)}
+                        title="Contexto Original"
+                    >
+                        {contextData ? (
+                            <div className="space-y-4 font-serif">
+                                <div className="text-xs text-slate-500 text-center mb-4">
+                                    Página aprox: <span className="text-indigo-400 font-bold">{contextData.page}</span>
+                                </div>
+                                
+                                {contextData.prev.map((l, i) => (
+                                    <p key={i} className="text-slate-400 text-sm opacity-75">{l}</p>
+                                ))}
+                                
+                                <div className="bg-indigo-900/30 p-3 rounded border-l-4 border-indigo-500">
+                                    <p className="text-white font-medium text-lg">{contextData.prev[contextData.prev.length-1]?.includes(':') ? '' : ''} (Tu línea)</p> 
+                                    {/* Nota: La lógica exacta de resaltar la línea depende del formato, aquí mostramos contexto */}
+                                </div>
+
+                                {contextData.next.map((l, i) => (
+                                    <p key={i} className="text-slate-400 text-sm opacity-75">{l}</p>
+                                ))}
+                            </div>
+                        ) : (
+                            <p>Cargando contexto...</p>
+                        )}
+                    </Modal>
+                );
+            };
+
+            // ... (Resto de renderizados: Config, Result... iguales a la versión anterior)
+            const renderTestConfig = () => (
+                <div className="max-w-2xl mx-auto w-full px-4 py-12 animate-fade-in text-center">
+                    <h2 className="text-3xl font-bold text-white mb-2">Configura el Test</h2>
+                    <p className="text-slate-400 mb-8">{selectedScene} - {selectedCharacterData.characterName}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <button onClick={() => startTest('easy')} className="p-8 rounded-xl bg-slate-800 border-2 border-slate-700 hover:border-emerald-500 transition-all group text-left relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.Book size={48} /></div>
+                            <div className="text-emerald-400 mb-4 font-bold text-xl flex items-center gap-2 relative z-10"><Icons.Book /> Modo Fácil</div>
+                            <p className="text-slate-400 text-sm relative z-10">Preguntas en orden. Respuestas incorrectas muy obvias (otros personajes). Ideal para empezar.</p>
+                        </button>
+                        <button onClick={() => startTest('hard')} className="p-8 rounded-xl bg-slate-800 border-2 border-slate-700 hover:border-rose-500 transition-all group text-left relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.Brain size={48} /></div>
+                            <div className="text-rose-400 mb-4 font-bold text-xl flex items-center gap-2 relative z-10"><Icons.Brain /> Modo Difícil</div>
+                            <p className="text-slate-400 text-sm relative z-10">Preguntas aleatorias. Respuestas incorrectas son frases tuyas de la misma escena. ¡Solo para expertos!</p>
+                        </button>
+                    </div>
+                    <Button variant="ghost" className="mt-8 mx-auto" onClick={() => setGameState('DASHBOARD')}>Cancelar</Button>
+                </div>
+            );
 
             const renderResult = () => (
                 <div className="max-w-md mx-auto w-full px-4 py-12 text-center animate-fade-in">
@@ -719,6 +858,7 @@
                     {gameState === 'CONFIG_TEST' && renderTestConfig()}
                     {gameState === 'PLAYING' && renderPlaying()}
                     {gameState === 'RESULT' && renderResult()}
+                    {renderContextModal()}
                 </div>
             );
         }
