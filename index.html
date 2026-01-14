@@ -31,7 +31,7 @@
 <body class="text-slate-200 selection:bg-indigo-500/30">
     <div id="root"></div>
 
-    <!-- 1. CARGAMOS TUS DATOS -->
+    <!-- 1. CARGAMOS TUS DATOS (Asegúrate de que datos.js está en la misma carpeta) -->
     <script src="datos.js"></script>
 
     <!-- 2. LÓGICA DE LA APLICACIÓN -->
@@ -45,7 +45,7 @@
 
         const ACTORES = window.GUION_DATA || [];
 
-        // --- SISTEMA DE SONIDO ---
+        // --- SISTEMA DE SONIDO (Efectos) ---
         const playSound = (type) => {
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -75,6 +75,41 @@
                     osc.stop(now + 0.3);
                 }
             } catch (e) { console.error(e); }
+        };
+
+        // --- SISTEMA DE VOZ (TTS MEJORADO) ---
+        const speakText = (text) => {
+            if (!window.speechSynthesis) {
+                alert("Tu navegador no soporta lectura de texto.");
+                return;
+            }
+            
+            // Cancelar audio anterior para evitar colas
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'es-ES'; 
+            utterance.rate = 1; 
+
+            // Función para seleccionar la voz y hablar
+            const speak = () => {
+                const voices = window.speechSynthesis.getVoices();
+                // Priorizar voces de Google o Microsoft en español
+                const spanishVoice = voices.find(v => v.lang.includes('es') && (v.name.includes('Google') || v.name.includes('Microsoft')));
+                const anySpanishVoice = voices.find(v => v.lang.includes('es'));
+                
+                if (spanishVoice) utterance.voice = spanishVoice;
+                else if (anySpanishVoice) utterance.voice = anySpanishVoice;
+
+                window.speechSynthesis.speak(utterance);
+            };
+
+            // Asegurar carga de voces (Chrome a veces las carga asíncronamente)
+            if (window.speechSynthesis.getVoices().length === 0) {
+                 window.speechSynthesis.onvoiceschanged = speak;
+            } else {
+                 speak();
+            }
         };
 
         // --- ICONOS ---
@@ -216,11 +251,10 @@
                 const pageMatch = textAfter.match(/[\n\r]\s*(\d+)\s*[\n\r]/);
                 const page = pageMatch ? pageMatch[1].trim() : "?";
 
-                // Se muestra más contexto aumentando los parámetros slice
                 return {
                     page: page,
-                    prev: linesBefore.slice(-5), // AUMENTADO a 5 líneas anteriores
-                    next: linesAfter.slice(1, 6) // AUMENTADO a 5 líneas posteriores
+                    prev: linesBefore.slice(-5),
+                    next: linesAfter.slice(1, 6)
                 };
             };
 
@@ -501,7 +535,7 @@
                 </div>
             );
 
-            // --- MODO ENSAYO GUIADO (CORREGIDO) ---
+            // --- MODO ENSAYO GUIADO (CORREGIDO Y CON TEXTO A VOZ) ---
             const renderRehearsal = () => {
                 const currentLine = selectedCharacterData.lines[rehearsalIndex];
                 const total = selectedCharacterData.lines.length;
@@ -529,7 +563,17 @@
                                     <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">PIE (Anterior)</p>
                                     <div className="flex gap-2">
                                         <button onClick={() => speakText(currentLine.cue)} className="text-slate-500 hover:text-indigo-400" title="Escuchar"><Icons.Volume2 size={16}/></button>
-                                        <button onClick={() => openContext(currentLine.t)} className="text-slate-500 hover:text-indigo-400" title="Ver Contexto"><Icons.FileText size={16}/></button>
+                                        {/* Botón de contexto arreglado */}
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                openContext(currentLine.t);
+                                            }}
+                                            className="text-slate-500 hover:text-indigo-400 cursor-pointer pointer-events-auto z-50"
+                                            title="Ver Contexto"
+                                        >
+                                            <Icons.FileText size={16}/>
+                                        </button>
                                     </div>
                                 </div>
                                 <p className="text-slate-200 font-serif italic leading-relaxed" style={fontStyleXl}>
