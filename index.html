@@ -16,6 +16,7 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        @keyframes widthShrink { from { width: 100%; } to { width: 0%; } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out; }
         .animate-slide-in { animation: slideIn 0.3s ease-out; }
         .animate-pop { animation: pop 0.2s ease-out; }
@@ -30,7 +31,7 @@
 <body class="text-slate-200 selection:bg-indigo-500/30">
     <div id="root"></div>
 
-    <!-- 1. CARGAMOS TUS DATOS (Asegúrate de que datos.js está en la misma carpeta) -->
+    <!-- 1. CARGAMOS TUS DATOS -->
     <script src="datos.js"></script>
 
     <!-- 2. LÓGICA DE LA APLICACIÓN -->
@@ -100,7 +101,8 @@
             ArrowRight: (props) => <Icon {...props} d={<path d="M5 12h14M12 5l7 7-7 7"/>} />,
             Fire: (props) => <Icon {...props} d={<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.6-3.3.7 1.9 2.1 2.8 2.9 2.8z"/>} />,
             TextSize: (props) => <Icon {...props} d={<><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></>} />,
-            FileText: (props) => <Icon {...props} d={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>} />
+            FileText: (props) => <Icon {...props} d={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>} />,
+            Volume2: (props) => <Icon {...props} d={<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" /></>} />
         };
 
         // --- UI HELPERS ---
@@ -140,8 +142,8 @@
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl animate-pop">
-                        <div className="flex justify-between items-center p-4 border-b border-slate-800">
+                    <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+                        <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-900 sticky top-0 z-10">
                             <h3 className="font-bold text-lg text-white flex items-center gap-2">{title}</h3>
                             <button onClick={onClose} className="text-slate-400 hover:text-white"><Icons.X size={24} /></button>
                         </div>
@@ -162,14 +164,14 @@
             const [selectedCharacterData, setSelectedCharacterData] = useState(null);
             const [searchQuery, setSearchQuery] = useState("");
             const [sortMethod, setSortMethod] = useState('lines'); 
-            const [fontSize, setFontSize] = useState(1); // Escala de fuente (1 = 100%)
+            const [fontSize, setFontSize] = useState(1); 
 
             // Test States
             const [testMode, setTestMode] = useState(null); 
             const [testQuestions, setTestQuestions] = useState([]);
             const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
             const [score, setScore] = useState(0);
-            const [streak, setStreak] = useState(0); // Racha
+            const [streak, setStreak] = useState(0); 
             const [lastAnswerCorrect, setLastAnswerCorrect] = useState(null);
             const [currentOptions, setCurrentOptions] = useState([]);
             const [selectedOption, setSelectedOption] = useState(null);
@@ -180,8 +182,7 @@
             const [showAllLines, setShowAllLines] = useState(true);
             const [onlyCuesMode, setOnlyCuesMode] = useState(false);
             const [rehearsalIndex, setRehearsalIndex] = useState(0); 
-            const [rehearsalRevealed, setRehearsalRevealed] = useState(false); // Si la frase se está mostrando temporalmente
-            const [rehearsalShowing, setRehearsalShowing] = useState(false); // Controla la visibilidad de la frase
+            const [rehearsalRevealed, setRehearsalRevealed] = useState(false); 
 
             // Contexto
             const [contextModalOpen, setContextModalOpen] = useState(false);
@@ -191,48 +192,41 @@
             useEffect(() => {
                 fetch('ENTREMESES-OK.txt')
                     .then(response => {
-                        if (!response.ok) throw new Error("No se pudo cargar el archivo");
+                        if (!response.ok) throw new Error("No se pudo cargar");
                         return response.text();
                     })
                     .then(text => setScriptText(text))
-                    .catch(err => console.log("Guion completo no disponible todavía (subir a GitHub)."));
+                    .catch(err => console.log("Guion no disponible."));
             }, []);
 
             // --- BUSCADOR DE CONTEXTO ---
             const findContext = (lineText) => {
                 if (!scriptText) return null;
-                
-                // Normalizar para búsqueda (quitar espacios extra, etc)
-                const cleanLine = lineText.trim().substring(0, 20); // Buscar por los primeros 20 caracteres para evitar errores de puntuación
+                const cleanLine = lineText.trim().substring(0, 15); 
                 const index = scriptText.indexOf(cleanLine);
                 
-                if (index === -1) return { error: "Frase no encontrada exactamente en el texto." };
+                if (index === -1) return { error: "Frase no encontrada." };
 
-                // Buscar hacia atrás para el anterior y página
                 const textBefore = scriptText.substring(0, index);
                 const textAfter = scriptText.substring(index);
                 
-                // Buscar número de página (simplificado: busca números solos entre saltos de línea hacia atrás)
-                // Esto es aproximado.
-                const pageMatch = textBefore.match(/[\n\r]\s*(\d+)\s*[\n\r]/g);
-                const page = pageMatch ? pageMatch[pageMatch.length - 1].trim() : "?";
-
-                // Líneas circundantes (búsqueda simple por saltos de línea)
                 const linesBefore = textBefore.split('\n').filter(l => l.trim().length > 0);
                 const linesAfter = textAfter.split('\n').filter(l => l.trim().length > 0);
 
-                // La línea actual es la primera de linesAfter (o parte de ella)
-                // Contexto: Las 2 anteriores y las 2 siguientes
+                const pageMatch = textAfter.match(/[\n\r]\s*(\d+)\s*[\n\r]/);
+                const page = pageMatch ? pageMatch[1].trim() : "?";
+
+                // Se muestra más contexto aumentando los parámetros slice
                 return {
                     page: page,
-                    prev: linesBefore.slice(-7),
-                    next: linesAfter.slice(1, 5) // Saltamos la 0 que es la actual
+                    prev: linesBefore.slice(-5), // AUMENTADO a 5 líneas anteriores
+                    next: linesAfter.slice(1, 6) // AUMENTADO a 5 líneas posteriores
                 };
             };
 
             const openContext = (lineText) => {
                 if (!scriptText) {
-                    alert("⚠️ El archivo de guion (ENTREMESES-OK.txt) no se ha cargado. Asegúrate de subirlo a GitHub.");
+                    alert("⚠️ Sube el archivo ENTREMESES-OK.txt a GitHub para usar esta función.");
                     return;
                 }
                 const ctx = findContext(lineText);
@@ -294,22 +288,17 @@
                 setOnlyCuesMode(false);
             };
 
-            // --- LÓGICA DE ENSAYO PASO A PASO (MEJORADA) ---
+            // --- LÓGICA DE ENSAYO GUIADO ---
             const startRehearsal = () => {
                 setRehearsalIndex(0);
-                setRehearsalShowing(false);
                 setRehearsalRevealed(false);
                 setGameState('REHEARSAL');
             };
 
             const handleRehearsalReveal = () => {
-                // Mostrar frase
-                setRehearsalShowing(true);
-                setRehearsalRevealed(true); // Indicar que ya se ha revelado (para cambiar el botón a "Volver a ver")
-
-                // Temporizador de 2 segundos para ocultar
+                setRehearsalRevealed(true);
                 setTimeout(() => {
-                    setRehearsalShowing(false);
+                    setRehearsalRevealed(false); 
                 }, 2000);
             };
 
@@ -317,8 +306,7 @@
                 const next = rehearsalIndex + 1;
                 if (next < selectedCharacterData.lines.length) {
                     setRehearsalIndex(next);
-                    setRehearsalShowing(false);
-                    setRehearsalRevealed(false); // Reset para la nueva línea
+                    setRehearsalRevealed(false);
                 } else {
                     setGameState('DASHBOARD');
                 }
@@ -494,7 +482,7 @@
                         <Card onClick={startRehearsal} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-amber-500 group transform transition hover:scale-[1.02]">
                             <div className="mb-4 bg-amber-900/20 w-12 h-12 rounded-xl flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform"><Icons.Play /></div>
                             <h3 className="text-2xl font-bold text-white mb-2">Ensayo Guiado</h3>
-                            <p className="text-slate-400 mb-6">Paso a paso. Ve el pie, recita tu frase y comprueba. Flujo real.</p>
+                            <p className="text-slate-400 mb-6">Paso a paso. Ve el pie, recita tu frase, compruébala y vuelve a ocultarla. Tú marcas el ritmo.</p>
                             <Button variant="secondary" className="w-full">Comenzar</Button>
                         </Card>
                         <Card onClick={() => setGameState('STUDY')} className="p-8 cursor-pointer hover:bg-slate-750 border-l-4 border-l-emerald-500 group transform transition hover:scale-[1.02]">
@@ -513,7 +501,7 @@
                 </div>
             );
 
-            // --- MODO ENSAYO GUIADO (MEJORADO) ---
+            // --- MODO ENSAYO GUIADO (CORREGIDO) ---
             const renderRehearsal = () => {
                 const currentLine = selectedCharacterData.lines[rehearsalIndex];
                 const total = selectedCharacterData.lines.length;
@@ -537,26 +525,29 @@
                             {/* Tarjeta PIE */}
                             <div className="bg-slate-800 p-8 rounded-2xl border-t-4 border-indigo-500 shadow-xl relative overflow-hidden">
                                 <div className="absolute top-0 right-0 p-4 opacity-10"><Icons.User size={64}/></div>
-                                <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-4">PIE (Anterior)</p>
+                                <div className="flex justify-between items-start mb-4">
+                                    <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">PIE (Anterior)</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => speakText(currentLine.cue)} className="text-slate-500 hover:text-indigo-400" title="Escuchar"><Icons.Volume2 size={16}/></button>
+                                        <button onClick={() => openContext(currentLine.t)} className="text-slate-500 hover:text-indigo-400" title="Ver Contexto"><Icons.FileText size={16}/></button>
+                                    </div>
+                                </div>
                                 <p className="text-slate-200 font-serif italic leading-relaxed" style={fontStyleXl}>
                                     "{currentLine.cue}"
                                 </p>
-                                <button 
-                                    onClick={() => openContext(currentLine.t)}
-                                    className="mt-4 text-xs flex items-center gap-1 text-slate-500 hover:text-indigo-400 transition-colors"
-                                >
-                                    <Icons.FileText size={14}/> Ver Contexto
-                                </button>
                             </div>
 
                             {/* Tarjeta RESPUESTA */}
-                            <div className={`transition-all duration-300 ${rehearsalShowing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                            <div className={`transition-all duration-300 ${rehearsalRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                                 <div className="bg-emerald-900/20 p-8 rounded-2xl border border-emerald-900/50 shadow-xl relative overflow-hidden">
                                     {/* Barra de progreso de lectura */}
-                                    {rehearsalShowing && (
-                                        <div className="absolute top-0 left-0 h-1 bg-emerald-400 animate-[width_2s_linear] w-full"></div>
+                                    {rehearsalRevealed && (
+                                        <div className="absolute top-0 left-0 h-1 bg-emerald-400 animate-[widthShrink_2s_linear_forwards] w-full"></div>
                                     )}
-                                    <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">TU FRASE ({currentLine.p})</p>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">TU FRASE ({currentLine.p})</p>
+                                        <button onClick={() => speakText(currentLine.t)} className="text-emerald-500/50 hover:text-emerald-400"><Icons.Volume2 size={16}/></button>
+                                    </div>
                                     <p className="text-emerald-100 font-medium leading-relaxed" style={fontStyleXl}>
                                         {currentLine.t}
                                     </p>
@@ -565,31 +556,25 @@
                         </div>
 
                         {/* Botonera */}
-                        <div className="mt-8 pt-4 border-t border-slate-800 grid grid-cols-1 gap-4">
-                            {/* Botón Principal (Revelar/Volver a ver) */}
+                        <div className="mt-8 pt-4 border-t border-slate-800 grid grid-cols-2 gap-4">
+                            {/* Botón Revelar */}
                             <button 
                                 onClick={handleRehearsalReveal}
-                                disabled={rehearsalShowing}
-                                className={`w-full text-white font-bold py-6 rounded-xl text-xl shadow-lg transition-all flex items-center justify-center gap-3
-                                    ${rehearsalShowing ? 'bg-slate-700 cursor-wait opacity-50' : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95'}`}
+                                disabled={rehearsalRevealed}
+                                className={`col-span-1 text-white font-bold py-6 rounded-xl text-lg shadow-lg transition-all flex items-center justify-center gap-2
+                                    ${rehearsalRevealed ? 'bg-slate-700 cursor-wait opacity-50' : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95'}`}
                             >
-                                {rehearsalShowing ? "Memorizando..." : (
-                                    <>
-                                        <Icons.Eye size={24} /> 
-                                        {rehearsalRevealed ? "Volver a ver frase" : "Revelar mi frase"}
-                                    </>
-                                )}
+                                <Icons.Eye size={20} /> 
+                                {rehearsalRevealed ? "Leyendo..." : "Revelar"}
                             </button>
 
-                            {/* Botón Siguiente (Solo aparece si ya has revelado al menos una vez) */}
-                            {rehearsalRevealed && !rehearsalShowing && (
-                                <button 
-                                    onClick={nextRehearsalLine}
-                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 animate-fade-in"
-                                >
-                                    Siguiente Pie <Icons.ArrowRight size={24} />
-                                </button>
-                            )}
+                            {/* Botón Siguiente */}
+                            <button 
+                                onClick={nextRehearsalLine}
+                                className="col-span-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-6 rounded-xl text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                Siguiente <Icons.ArrowRight size={20} />
+                            </button>
                         </div>
                     </div>
                 );
@@ -664,7 +649,10 @@
                                                     {isHidden ? "Clic para revelar..." : line.t}
                                                 </div>
                                             </div>
-                                            <div className="mt-4 flex justify-end">
+                                            <div className="mt-4 flex justify-end gap-3">
+                                                <button onClick={(e) => { e.stopPropagation(); speakText(line.t); }} className="text-xs text-slate-500 flex items-center gap-1 hover:text-indigo-400">
+                                                    <Icons.Volume2 size={14}/> Escuchar
+                                                </button>
                                                 <button onClick={(e) => { e.stopPropagation(); openContext(line.t); }} className="text-xs text-slate-500 flex items-center gap-1 hover:text-indigo-400">
                                                     <Icons.FileText size={14}/> Contexto
                                                 </button>
@@ -709,6 +697,9 @@
                         </div>
 
                         <div className="bg-slate-800 rounded-2xl p-6 md:p-10 mb-6 border-t-4 border-indigo-500 shadow-2xl relative">
+                            <div className="absolute top-2 right-2 flex gap-2">
+                                <button onClick={() => openContext(currentQuestion.t)} className="p-2 text-slate-500 hover:text-indigo-400 bg-slate-900/50 rounded-full" title="Ver contexto"><Icons.FileText size={18}/></button>
+                            </div>
                             <div className="text-center mb-8">
                                 <p className="text-xs uppercase text-slate-500 font-bold mb-2 tracking-widest">PIE</p>
                                 <p className="text-xl md:text-2xl text-indigo-200 italic font-serif">"{currentQuestion.cue}"</p>
