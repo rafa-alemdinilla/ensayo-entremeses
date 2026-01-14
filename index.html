@@ -212,12 +212,10 @@
                 const textBefore = scriptText.substring(0, index);
                 const textAfter = scriptText.substring(index);
                 
-                // Buscar hacia ADELANTE: Miramos el texto que sigue para encontrar el pie de página
-                const textAfter = scriptText.substring(index);
-                // Buscamos el primer número que aparezca solo en una línea
-                const pageMatch = textAfter.match(/[\n\r]\s*(\d+)\s*[\n\r]/);
-                // Si encontramos uno, cogemos ese. Si no, ponemos "?"
-                const page = pageMatch ? pageMatch[1].trim() : "?";
+                // Buscar número de página (simplificado: busca números solos entre saltos de línea hacia atrás)
+                // Esto es aproximado.
+                const pageMatch = textBefore.match(/[\n\r]\s*(\d+)\s*[\n\r]/g);
+                const page = pageMatch ? pageMatch[pageMatch.length - 1].trim() : "?";
 
                 // Líneas circundantes (búsqueda simple por saltos de línea)
                 const linesBefore = textBefore.split('\n').filter(l => l.trim().length > 0);
@@ -870,4 +868,3 @@
     </script>
 </body>
 </html>
-
